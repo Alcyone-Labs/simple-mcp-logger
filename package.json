@@ -6,6 +6,10 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "maintainers": [
+    "Nicolas Embleton <nicolas.embleton@gmail.com>"
+  ],
+  "access": "public",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
