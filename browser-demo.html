@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleMcpLogger Browser Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+        .console-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin-top: 20px;
+            min-height: 200px;
+            overflow-y: auto;
+        }
+        .log-info { color: #569cd6; }
+        .log-warn { color: #dcdcaa; }
+        .log-error { color: #f44747; }
+        .log-debug { color: #9cdcfe; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SimpleMcpLogger Browser Demo</h1>
+        <p>This demo shows SimpleMcpLogger working in a browser environment. Click the buttons below to test different logging features:</p>
+        
+        <div>
+            <button onclick="testBasicLogging()">Basic Logging</button>
+            <button onclick="testConsoleReplacement()">Console Compatibility</button>
+            <button onclick="testGrouping()">Grouping</button>
+            <button onclick="testTiming()">Timing</button>
+            <button onclick="testTable()">Table Logging</button>
+            <button onclick="testMcpMode()">MCP Mode</button>
+            <button onclick="clearOutput()">Clear Console</button>
+        </div>
+
+        <p><strong>Note:</strong> The "Console Compatibility" button demonstrates method compatibility. For actual console replacement, do it at application startup before any logging occurs to avoid infinite loops.</p>
+
+        <div class="console-output" id="console-output">
+            <div>Open browser console to see SimpleMcpLogger in action!</div>
+            <div>Click the buttons above to test different features.</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import SimpleMcpLogger from the built distribution
+        // In a real application, you would import from npm + bundle or from a CDN
+        import { Logger, logger, createMcpLogger, createCliLogger } from './dist/index.mjs';
+
+        // PROPER CONSOLE REPLACEMENT EXAMPLE (do this at app startup):
+        // const appLogger = new Logger({ level: 'info', prefix: 'App' });
+        // globalThis.console = appLogger;
+        // Now all console.* calls will use SimpleMcpLogger safely!
+
+        // Create different logger instances
+        const appLogger = new Logger({
+            level: 'debug',
+            prefix: 'BrowserApp',
+            mcpMode: false
+        });
+
+        const mcpLogger = createMcpLogger('MCP');
+        const cliLogger = createCliLogger('debug', 'CLI');
+
+        // Make loggers available globally for the demo
+        window.appLogger = appLogger;
+        window.mcpLogger = mcpLogger;
+        window.cliLogger = cliLogger;
+        window.globalLogger = logger;
+
+        // Test functions
+        window.testBasicLogging = function() {
+            console.log('=== Testing Basic Logging ===');
+            appLogger.debug('This is a debug message');
+            appLogger.info('This is an info message');
+            appLogger.warn('This is a warning message');
+            appLogger.error('This is an error message');
+            appLogger.log('This is a log message (alias for info)');
+        };
+
+        window.testConsoleReplacement = function() {
+            console.log('=== Testing Console Replacement ===');
+            console.log('Note: This demonstrates the concept. In practice, you would replace console before any logging occurs.');
+
+            // Show that our logger has all the same methods as console
+            const loggerMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(appLogger))
+                .filter(name => typeof appLogger[name] === 'function' && !name.startsWith('_') && name !== 'constructor');
+
+            console.log('SimpleMcpLogger methods:', loggerMethods.sort());
+
+            // Demonstrate method compatibility without infinite loop
+            console.log('Calling appLogger methods directly:');
+            appLogger.log('✓ log() method works');
+            appLogger.info('✓ info() method works');
+            appLogger.warn('✓ warn() method works');
+            appLogger.error('✓ error() method works');
+            appLogger.debug('✓ debug() method works');
+            appLogger.trace('✓ trace() method works');
+
+            console.log('Console replacement is safe when done at application startup!');
+        };
+
+        window.testGrouping = function() {
+            console.log('=== Testing Grouping ===');
+            appLogger.group('User Actions');
+            appLogger.info('User clicked login button');
+            appLogger.info('Validating credentials');
+            appLogger.groupCollapsed('API Calls');
+            appLogger.info('POST /api/auth/login');
+            appLogger.info('GET /api/user/profile');
+            appLogger.groupEnd();
+            appLogger.info('Login successful');
+            appLogger.groupEnd();
+        };
+
+        window.testTiming = function() {
+            console.log('=== Testing Timing ===');
+            appLogger.time('API Call');
+            
+            // Simulate async operation
+            setTimeout(() => {
+                appLogger.timeLog('API Call', 'Checkpoint: received response');
+                setTimeout(() => {
+                    appLogger.timeEnd('API Call');
+                }, 100);
+            }, 200);
+        };
+
+        window.testTable = function() {
+            console.log('=== Testing Table Logging ===');
+            const users = [
+                { name: 'John', age: 30, role: 'Admin' },
+                { name: 'Jane', age: 25, role: 'User' },
+                { name: 'Bob', age: 35, role: 'Moderator' }
+            ];
+            
+            appLogger.table(users);
+            appLogger.table(users, ['name', 'role']);
+        };
+
+        window.testMcpMode = function() {
+            console.log('=== Testing MCP Mode ===');
+
+            console.log('1. Regular logger (MCP mode OFF):');
+            appLogger.info('✓ This WILL be logged (normal mode)');
+
+            console.log('2. MCP logger (MCP mode ON) - should suppress most output:');
+            console.log('   Calling mcpLogger.info() - should be silent...');
+            mcpLogger.info('❌ This should NOT appear (MCP mode suppresses info)');
+
+            console.log('   Calling mcpLogger.error() - should be silent...');
+            mcpLogger.error('❌ This should NOT appear (MCP mode suppresses error)');
+
+            console.log('   Calling mcpLogger.mcpError() - should appear:');
+            mcpLogger.mcpError('✓ This WILL appear (mcpError bypasses MCP mode)');
+
+            console.log('3. Toggling MCP mode on regular logger:');
+            console.log('   Enabling MCP mode...');
+            appLogger.setMcpMode(true);
+            console.log('   Calling appLogger.info() - should be silent...');
+            appLogger.info('❌ This should NOT appear (MCP mode enabled)');
+
+            console.log('   Disabling MCP mode...');
+            appLogger.setMcpMode(false);
+            console.log('   Calling appLogger.info() - should appear:');
+            appLogger.info('✓ This WILL appear (MCP mode disabled)');
+
+            console.log('MCP mode test completed!');
+        };
+
+        window.clearOutput = function() {
+            appLogger.clear();
+        };
+
+        // Initial message
+        console.log('SimpleMcpLogger Browser Demo loaded successfully!');
+        console.log('Bundle size: ~12KB (2.6KB gzipped)');
+        console.log('All console methods are available and working.');
+    </script>
+</body>
+</html>
