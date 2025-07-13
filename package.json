@@ -1,6 +1,6 @@
 {
   "name": "@alcyone-labs/simple-mcp-logger",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Logging solution for MCP servers. Prevents console output from corrupting MCP protocol communication. Drop-in replacement for console, Winston, and Pino with automatic STDOUT suppression in MCP mode.",
   "type": "module",
   "main": "./dist/index.cjs",
