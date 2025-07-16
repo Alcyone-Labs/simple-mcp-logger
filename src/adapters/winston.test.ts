@@ -219,7 +219,7 @@ describe('Winston Adapter', () => {
   });
 
   describe('file logging support', () => {
-    const testLogFile = './test-logs/winston-test.log';
+    const testLogFile = './test-logs-winston/winston-test.log';
 
 
 
@@ -228,8 +228,8 @@ describe('Winston Adapter', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        if (fs.existsSync('./test-logs-winston') && fs.readdirSync('./test-logs-winston').length === 0) {
+          fs.rmdirSync('./test-logs-winston');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -241,8 +241,9 @@ describe('Winston Adapter', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-winston') && fs.readdirSync('./test-logs-winston').length === 0) {
+          fs.rmdirSync('./test-logs-winston');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -325,7 +326,7 @@ describe('Winston Adapter', () => {
   });
 
   describe('createWinstonTransport factory with file logging', () => {
-    const testLogFile = './test-logs/winston-factory-test.log';
+    const testLogFile = './test-logs-winston/winston-factory-test.log';
 
 
 
@@ -334,8 +335,9 @@ describe('Winston Adapter', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-winston') && fs.readdirSync('./test-logs-winston').length === 0) {
+          fs.rmdirSync('./test-logs-winston');
         }
       } catch (error) {
         // Ignore cleanup errors

@@ -23,7 +23,7 @@ describe('SimpleMcpLogger', () => {
   });
 
   describe('file logging', () => {
-    const testLogFile = './test-logs/test.log';
+    const testLogFile = './test-logs-simple/test.log';
 
 
 
@@ -33,8 +33,8 @@ describe('SimpleMcpLogger', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        if (fs.existsSync('./test-logs-simple') && fs.readdirSync('./test-logs-simple').length === 0) {
+          fs.rmdirSync('./test-logs-simple');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -47,8 +47,9 @@ describe('SimpleMcpLogger', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-simple') && fs.readdirSync('./test-logs-simple').length === 0) {
+          fs.rmdirSync('./test-logs-simple');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -64,7 +65,7 @@ describe('SimpleMcpLogger', () => {
       testLogger.info('test message');
       await testLogger.close();
 
-      expect(fs.existsSync('./test-logs')).toBe(true);
+      expect(fs.existsSync('./test-logs-simple')).toBe(true);
       expect(fs.existsSync(testLogFile)).toBe(true);
     });
 
@@ -280,15 +281,16 @@ describe('SimpleMcpLogger', () => {
   });
 
   describe('createMcpLogger with file logging', () => {
-    const testLogFile = './test-logs/mcp-test.log';
+    const testLogFile = './test-logs-simple/mcp-test.log';
     
     afterEach(() => {
       try {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-simple') && fs.readdirSync('./test-logs-simple').length === 0) {
+          fs.rmdirSync('./test-logs-simple');
         }
       } catch (error) {
         // Ignore cleanup errors

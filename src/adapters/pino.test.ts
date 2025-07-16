@@ -303,15 +303,15 @@ describe('Pino Adapter', () => {
   });
 
   describe('file logging support', () => {
-    const testLogFile = './test-logs/pino-test.log';
-    
+    const testLogFile = './test-logs-pino/pino-test.log';
+
     beforeEach(() => {
       try {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        if (fs.existsSync('./test-logs-pino') && fs.readdirSync('./test-logs-pino').length === 0) {
+          fs.rmdirSync('./test-logs-pino');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -323,8 +323,9 @@ describe('Pino Adapter', () => {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-pino') && fs.readdirSync('./test-logs-pino').length === 0) {
+          fs.rmdirSync('./test-logs-pino');
         }
       } catch (error) {
         // Ignore cleanup errors
@@ -388,15 +389,16 @@ describe('Pino Adapter', () => {
   });
 
   describe('createPinoDestination with file logging', () => {
-    const testLogFile = './test-logs/pino-destination-test.log';
-    
+    const testLogFile = './test-logs-pino/pino-destination-test.log';
+
     afterEach(() => {
       try {
         if (fs.existsSync(testLogFile)) {
           fs.unlinkSync(testLogFile);
         }
-        if (fs.existsSync('./test-logs')) {
-          fs.rmdirSync('./test-logs');
+        // Only remove directory if it's empty
+        if (fs.existsSync('./test-logs-pino') && fs.readdirSync('./test-logs-pino').length === 0) {
+          fs.rmdirSync('./test-logs-pino');
         }
       } catch (error) {
         // Ignore cleanup errors
