@@ -29,6 +29,7 @@ mcpLogger.mcpError('Debug info', data);   // Safe: writes to STDERR
 - **MCP-compliant** - Automatically suppresses STDOUT output in MCP mode to prevent protocol corruption
 - **Drop-in replacement** - Compatible with console, Winston, and Pino APIs
 - **Protocol protection** - Prevents accidental console output from breaking MCP communication
+- **File logging** - Persistent logging to files with automatic directory creation
 - **Development-friendly** - Full logging during development, silent in production MCP mode
 - **Bundling optimized** - Modular design with separate adapter packages
 - **TypeScript-first** - Complete type safety and IntelliSense support
@@ -80,6 +81,15 @@ const myLogger = new Logger({
 myLogger.debug('Debug message');
 myLogger.info('Info message');
 
+// Create a logger with file output
+const fileLogger = new Logger({
+  level: 'info',
+  prefix: 'MyApp',
+  logToFile: './logs/app.log'  // Logs to file, directory created automatically
+});
+
+fileLogger.info('This goes to both console and file');
+
 // For MCP servers: use mcpError() for debugging (safe STDERR output)
 myLogger.mcpError('Debug info visible in client logs');
 ```
@@ -121,6 +131,11 @@ logger.warn('Rate limit approaching'); // Silent in MCP mode
 // ✅ SAFE: Critical debugging via STDERR (visible to client logs)
 logger.mcpError('Database connection failed'); // STDERR → Always visible
 logger.mcpError('Request state:', requestData); // STDERR → Safe debugging
+
+// ✅ SAFE: MCP logger with file output (console suppressed, file enabled)
+const fileLogger = createMcpLogger('MyMcpServer', './logs/mcp.log');
+fileLogger.info('Processing request');  // Silent in MCP mode, written to file
+fileLogger.error('Error occurred');     // Silent in MCP mode, written to file
 ```
 
 ### Hijacking Console for MCP Safety
@@ -205,6 +220,7 @@ interface LoggerConfig {
   level: LogLevel;        // 'debug' | 'info' | 'warn' | 'error' | 'silent'
   mcpMode: boolean;       // Suppress output when true
   prefix?: string;        // Prefix for all messages
+  logToFile?: string;     // Optional file path for persistent logging
 }
 ```
 
@@ -239,12 +255,14 @@ All standard console methods are supported:
 - `setMcpMode(enabled: boolean): void` - Toggle MCP mode
 - `setLevel(level: LogLevel): void` - Change log level
 - `setPrefix(prefix: string): void` - Change prefix
+- `setLogFile(filePath: string): Promise<void>` - Set or change log file path
+- `close(): Promise<void>` - Close file stream and flush pending writes
 
 ### Factory Functions
 
 ```typescript
 // Create logger for MCP mode
-createMcpLogger(prefix?: string): Logger
+createMcpLogger(prefix?: string, logToFile?: string): Logger
 
 // Create logger for CLI mode
 createCliLogger(level?: LogLevel, prefix?: string): Logger
@@ -288,14 +306,15 @@ const logger = winston.createLogger({
     createWinstonTransport({
       level: 'debug',
       mcpMode: true,  // Automatically suppresses STDOUT in MCP mode
-      prefix: 'MCP-Server'
+      prefix: 'MCP-Server',
+      logToFile: './logs/mcp-server.log'  // Optional: log to file
     })
   ]
 });
 
 // Your existing logging code works unchanged
-logger.info('Processing MCP request');  // Safe in MCP mode
-logger.error('Request failed');         // Safe in MCP mode
+logger.info('Processing MCP request');  // Safe in MCP mode, written to file
+logger.error('Request failed');         // Safe in MCP mode, written to file
 ```
 
 ### Pino Adapter
@@ -311,14 +330,15 @@ import pino from 'pino';
 const destination = createPinoDestination({
   level: 'debug',
   mcpMode: true,  // Automatically suppresses STDOUT in MCP mode
-  prefix: 'MCP-Server'
+  prefix: 'MCP-Server',
+  logToFile: './logs/mcp-server.log'  // Optional: log to file
 });
 
 const logger = pino({ level: 'debug' }, destination);
 
 // Your existing logging code works unchanged
-logger.info('Processing MCP request');  // Safe in MCP mode
-logger.error('Request failed');         // Safe in MCP mode
+logger.info('Processing MCP request');  // Safe in MCP mode, written to file
+logger.error('Request failed');         // Safe in MCP mode, written to file
 ```
 
 ## MCP Best Practices
@@ -482,6 +502,103 @@ const destination = createPinoDestination({
 const logger = pino({ level: 'info' }, destination);
 logger.info('Hello from Pino in browser!');
 ```
+
+## File Logging
+
+SimpleMcpLogger supports persistent logging to files with automatic directory creation and proper file stream management.
+
+### Basic File Logging
+
+```typescript
+import { Logger, createMcpLogger } from '@alcyone-labs/simple-mcp-logger';
+
+// Create logger with file output
+const logger = new Logger({
+  level: 'info',
+  logToFile: './logs/app.log'  // Directory created automatically
+});
+
+logger.info('This goes to both console and file');
+logger.error('Errors are logged to file too');
+
+// Always close the logger when done to flush pending writes
+await logger.close();
+```
+
+### MCP Mode with File Logging
+
+Perfect for MCP servers - suppress console output but maintain file logs:
+
+```typescript
+// MCP logger with file output (console suppressed, file enabled)
+const mcpLogger = createMcpLogger('MCP-Server', './logs/mcp.log');
+
+mcpLogger.info('Processing request');  // Silent in MCP mode, written to file
+mcpLogger.error('Error occurred');     // Silent in MCP mode, written to file
+mcpLogger.mcpError('Debug info');      // Always visible via STDERR + written to file
+
+// Gracefully close when shutting down
+await mcpLogger.close();
+```
+
+### Dynamic File Path Changes
+
+```typescript
+const logger = new Logger({ level: 'info' });
+
+// Start logging to one file
+await logger.setLogFile('./logs/startup.log');
+logger.info('Application starting');
+
+// Switch to a different file
+await logger.setLogFile('./logs/runtime.log');
+logger.info('Now logging to runtime file');
+
+// Disable file logging
+await logger.setLogFile('');  // Empty string disables file logging
+```
+
+### File Logging with Adapters
+
+Both Winston and Pino adapters support file logging:
+
+```typescript
+// Winston with file logging
+import { createWinstonTransport } from '@alcyone-labs/simple-mcp-logger/adapters';
+
+const transport = createWinstonTransport({
+  logToFile: './logs/winston.log',
+  mcpMode: true
+});
+
+// Pino with file logging
+import { createPinoDestination } from '@alcyone-labs/simple-mcp-logger/adapters';
+
+const destination = createPinoDestination({
+  logToFile: './logs/pino.log',
+  mcpMode: true
+});
+```
+
+### File Logging Best Practices
+
+1. **Always close loggers** when your application shuts down:
+   ```typescript
+   process.on('SIGINT', async () => {
+     await logger.close();
+     process.exit(0);
+   });
+   ```
+
+2. **Use absolute paths** for production deployments:
+   ```typescript
+   import { resolve } from 'node:path';
+
+   const logFile = resolve(process.cwd(), 'logs', 'app.log');
+   const logger = new Logger({ logToFile: logFile });
+   ```
+
+3. **Handle file errors gracefully** - SimpleMcpLogger automatically handles permission errors and continues logging to console.
 
 ### Bundle Size
 

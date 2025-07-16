@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import dts from 'vite-plugin-dts';
-import { writeFileSync, readFileSync } from 'fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 
 export default defineConfig({
   plugins: [
@@ -61,11 +61,13 @@ export { default as SimpleMcpLogger } from './SimpleMcpLogger.js';
       },
     },
     rollupOptions: {
-      external: ['winston-transport', 'pino'],
+      external: ['winston-transport', 'pino', 'node:fs', 'node:path'],
       output: {
         globals: {
           'winston-transport': 'WinstonTransport',
           'pino': 'pino',
+          'node:fs': 'fs',
+          'node:path': 'path',
         },
       },
     },

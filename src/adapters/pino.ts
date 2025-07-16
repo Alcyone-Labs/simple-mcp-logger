@@ -9,13 +9,13 @@ export class SimpleMcpPinoTransport {
 
   constructor(options: PinoTransportOptions = {}) {
     this.options = options;
-    
     const level = this.mapPinoLevelToMcp(options.level || 'info');
-    
+
     this.logger = new Logger({
       level,
       mcpMode: options.mcpMode || false,
-      prefix: options.prefix
+      prefix: options.prefix,
+      logToFile: options.logToFile
     });
   }
 
@@ -124,15 +124,30 @@ export class SimpleMcpPinoTransport {
   getLogger(): Logger {
     return this.logger;
   }
+
+  /**
+   * Set log file path
+   */
+  async setLogFile(filePath: string): Promise<void> {
+    await this.logger.setLogFile(filePath);
+  }
+
+  /**
+   * Close file stream
+   */
+  async close(): Promise<void> {
+    await this.logger.close();
+  }
 }
 
 /**
  * Options for Pino transport
  */
 export interface PinoTransportOptions {
-  level?: string | number;
+  level?: LogLevel;
   mcpMode?: boolean;
   prefix?: string;
+  logToFile?: string;
 }
 
 /**
@@ -143,7 +158,7 @@ export function createPinoTransport(options: PinoTransportOptions = {}): SimpleM
 }
 
 /**
- * Create a Pino-compatible destination that uses SimpleMcpLogger
+ * Create a Pino destination that uses SimpleMcpLogger
  */
 export function createPinoDestination(options: PinoTransportOptions = {}) {
   const transport = new SimpleMcpPinoTransport(options);
@@ -152,11 +167,11 @@ export function createPinoDestination(options: PinoTransportOptions = {}) {
     write(chunk: any) {
       transport.transform(chunk);
     },
-    end() {
-      // No-op for compatibility
+    async end() {
+      await transport.close();
     },
-    destroy() {
-      // No-op for compatibility
+    async destroy() {
+      await transport.close();
     }
   };
 }

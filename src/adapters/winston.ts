@@ -20,6 +20,7 @@ export class SimpleMcpWinstonTransport extends TransportStream {
   constructor(options: TransportStreamOptions & {
     mcpMode?: boolean;
     prefix?: string;
+    logToFile?: string;
   } = {}) {
     super(options);
     this.options = options;
@@ -29,7 +30,8 @@ export class SimpleMcpWinstonTransport extends TransportStream {
     this.logger = new Logger({
       level,
       mcpMode: options.mcpMode || false,
-      prefix: options.prefix
+      prefix: options.prefix,
+      logToFile: options.logToFile
     });
   }
 
@@ -143,6 +145,20 @@ export class SimpleMcpWinstonTransport extends TransportStream {
   getLogger(): Logger {
     return this.logger;
   }
+
+  /**
+   * Set log file path
+   */
+  async setLogFile(filePath: string): Promise<void> {
+    await this.logger.setLogFile(filePath);
+  }
+
+  /**
+   * Close file stream
+   */
+  async close(): Promise<void> {
+    await this.logger.close();
+  }
 }
 
 /**
@@ -151,6 +167,7 @@ export class SimpleMcpWinstonTransport extends TransportStream {
 export function createWinstonTransport(options: TransportStreamOptions & {
   mcpMode?: boolean;
   prefix?: string;
+  logToFile?: string;
 } = {}): SimpleMcpWinstonTransport {
   return new SimpleMcpWinstonTransport(options);
 }

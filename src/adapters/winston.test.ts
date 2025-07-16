@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SimpleMcpWinstonTransport, createWinstonTransport } from './winston.js';
+import * as fs from 'node:fs';
 
 describe('Winston Adapter', () => {
   let consoleSpy: {
@@ -214,6 +215,230 @@ describe('Winston Adapter', () => {
       transport.log({ level: 'info', message: 'test message' });
       
       expect(consoleSpy.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('file logging support', () => {
+    const testLogFile = './test-logs/winston-test.log';
+
+
+
+    beforeEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    afterEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should create transport with file logging option', async () => {
+      const transport = new SimpleMcpWinstonTransport({
+        level: 'debug',
+        logToFile: testLogFile
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'winston file test'
+      });
+
+      await transport.close();
+
+      expect(fs.existsSync(testLogFile)).toBe(true);
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: winston file test');
+    });
+
+    it('should write to file in MCP mode while suppressing console', async () => {
+      const transport = new SimpleMcpWinstonTransport({
+        level: 'debug',
+        mcpMode: true,
+        logToFile: testLogFile
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'mcp winston message'
+      });
+
+      await transport.close();
+
+      // Should not log to console in MCP mode
+      expect(consoleSpy.error).not.toHaveBeenCalled();
+
+      // But should write to file
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: mcp winston message');
+    });
+
+    it('should allow setting log file dynamically', async () => {
+      const transport = new SimpleMcpWinstonTransport({ level: 'debug' });
+
+      await transport.setLogFile(testLogFile);
+      transport.log({
+        level: 'info',
+        message: 'dynamic file test'
+      });
+
+      await transport.close();
+
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: dynamic file test');
+    });
+
+    it('should handle metadata in file logs', async () => {
+      const transport = new SimpleMcpWinstonTransport({
+        level: 'debug',
+        logToFile: testLogFile
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'winston metadata test',
+        userId: 123,
+        action: 'login'
+      });
+
+      await transport.close();
+
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: winston metadata test {"userId":123,"action":"login"}');
+    });
+  });
+
+  describe('createWinstonTransport factory with file logging', () => {
+    const testLogFile = './test-logs/winston-factory-test.log';
+
+
+
+    afterEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should create transport with file logging via factory', async () => {
+      const transport = createWinstonTransport({
+        level: 'debug',
+        mcpMode: true,
+        prefix: 'FACTORY',
+        logToFile: testLogFile
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'factory file test'
+      });
+
+      await transport.close();
+
+      expect(fs.existsSync(testLogFile)).toBe(true);
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: FACTORY factory file test');
+    });
+
+    it('should handle file write errors gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Try to write to an invalid path
+      const transport = new SimpleMcpWinstonTransport({
+        level: 'debug',
+        logToFile: '/invalid/path/test.log'
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'test message'
+      });
+
+      await transport.close();
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to initialize file logging'));
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle file permission errors', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Create a read-only directory (if possible on the system)
+      const readOnlyDir = './test-logs/readonly';
+      const readOnlyFile = `${readOnlyDir}/readonly.log`;
+
+      try {
+        fs.mkdirSync(readOnlyDir, { recursive: true });
+        fs.chmodSync(readOnlyDir, 0o444); // Read-only
+
+        const transport = new SimpleMcpWinstonTransport({
+          level: 'debug',
+          logToFile: readOnlyFile
+        });
+
+        transport.log({
+          level: 'info',
+          message: 'permission test'
+        });
+
+        await transport.close();
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('File logging will be disabled'));
+      } catch (error) {
+        // Skip test if we can't create read-only directory (e.g., on Windows)
+        console.log('Skipping permission test:', error);
+      } finally {
+        try {
+          fs.chmodSync(readOnlyDir, 0o755); // Restore permissions
+          fs.rmSync(readOnlyDir, { recursive: true, force: true });
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('should continue logging to console when file logging fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const transport = new SimpleMcpWinstonTransport({
+        level: 'debug',
+        mcpMode: false, // Allow console logging
+        logToFile: '/invalid/path/test.log'
+      });
+
+      transport.log({
+        level: 'info',
+        message: 'fallback test'
+      });
+
+      await transport.close();
+
+      // Should still log to console even if file logging fails
+      expect(consoleSpy).toHaveBeenCalledWith('fallback test');
+      consoleSpy.mockRestore();
     });
   });
 });

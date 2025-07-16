@@ -3,16 +3,28 @@
  * Provides MCP-compliant logging that can be disabled in MCP mode
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
+/**
+ * Configuration options for SimpleMcpLogger
+ */
 export interface LoggerConfig {
+  /** Minimum log level to output */
   level: LogLevel;
+  /** When true, suppresses console output to prevent MCP protocol corruption */
   mcpMode: boolean;
+  /** Optional prefix to prepend to all log messages */
   prefix?: string;
+  /** Optional file path for persistent logging. Creates directory if it doesn't exist. */
+  logToFile?: string;
 }
 
 export class Logger {
   private config: LoggerConfig;
+  private fileStream?: fs.WriteStream;
   
   constructor(config: Partial<LoggerConfig> = {}) {
     this.config = {
@@ -21,6 +33,49 @@ export class Logger {
       prefix: '',
       ...config
     };
+    
+    // Initialize file logging if specified
+    if (this.config.logToFile) {
+      this.initFileLogging(this.config.logToFile);
+    }
+  }
+  
+  /**
+   * Initialize file logging
+   */
+  private initFileLogging(filePath: string): void {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(filePath);
+      fs.mkdirSync(dir, { recursive: true });
+
+      this.fileStream = fs.createWriteStream(filePath, { flags: 'a' });
+
+      this.fileStream.on('error', (error) => {
+        console.error(`SimpleMcpLogger: File stream error for '${filePath}': ${error.message}`);
+        console.error(`SimpleMcpLogger: File logging will be disabled. Check file permissions and disk space.`);
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`SimpleMcpLogger: Failed to initialize file logging for '${filePath}': ${errorMessage}`);
+      console.error(`SimpleMcpLogger: Possible causes: invalid path, insufficient permissions, or disk full.`);
+      this.fileStream = undefined;
+    }
+  }
+  
+  /**
+   * Write to file if file logging is enabled
+   */
+  private writeToFile(level: string, message: string, ...args: any[]): void {
+    if (this.fileStream && !this.fileStream.destroyed) {
+      const timestamp = new Date().toISOString();
+      const formattedArgs = args.length > 0 ? ' ' + args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ') : '';
+
+      const logLine = `[${timestamp}] ${level.toUpperCase()}: ${message}${formattedArgs}\n`;
+      this.fileStream.write(logLine);
+    }
   }
   
   /**
@@ -45,11 +100,47 @@ export class Logger {
   }
   
   /**
+   * Set or change the log file path
+   *
+   * @param filePath Path to the log file. Directory will be created if it doesn't exist.
+   *
+   * @example
+   * ```typescript
+   * await logger.setLogFile('./logs/app.log');
+   * logger.info('This goes to the new file');
+   * ```
+   */
+  public async setLogFile(filePath: string): Promise<void> {
+    // Close existing stream
+    await this.close();
+
+    this.config.logToFile = filePath;
+    this.initFileLogging(filePath);
+  }
+  
+  /**
+   * Close file stream
+   */
+  public close(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.fileStream && !this.fileStream.destroyed) {
+        // Ensure all data is written before closing
+        this.fileStream.end(() => {
+          this.fileStream = undefined;
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+  }
+  
+  /**
    * Check if logging is enabled for a given level
    */
   private shouldLog(level: LogLevel): boolean {
-    if (this.config.mcpMode) {
-      return false; // No console output in MCP mode
+    if (this.config.mcpMode && !this.config.logToFile) {
+      return false; // No console output in MCP mode unless file logging
     }
     
     if (this.config.level === 'silent') {
@@ -64,6 +155,13 @@ export class Logger {
   }
   
   /**
+   * Check if console logging should be used (not in MCP mode or file logging disabled)
+   */
+  private shouldLogToConsole(level: LogLevel): boolean {
+    return this.shouldLog(level) && (!this.config.mcpMode || !this.config.logToFile);
+  }
+  
+  /**
    * Format message with prefix
    */
   private formatMessage(message: string): string {
@@ -75,7 +173,12 @@ export class Logger {
    */
   public debug(message: string, ...args: any[]): void {
     if (this.shouldLog('debug')) {
-      console.debug(this.formatMessage(message), ...args);
+      if (this.config.logToFile) {
+        this.writeToFile('debug', this.formatMessage(message), ...args);
+      }
+      if (this.shouldLogToConsole('debug')) {
+        console.debug(this.formatMessage(message), ...args);
+      }
     }
   }
   
@@ -84,7 +187,12 @@ export class Logger {
    */
   public info(message: string, ...args: any[]): void {
     if (this.shouldLog('info')) {
-      console.error(this.formatMessage(message), ...args);
+      if (this.config.logToFile) {
+        this.writeToFile('info', this.formatMessage(message), ...args);
+      }
+      if (this.shouldLogToConsole('info')) {
+        console.error(this.formatMessage(message), ...args);
+      }
     }
   }
   
@@ -93,7 +201,12 @@ export class Logger {
    */
   public warn(message: string, ...args: any[]): void {
     if (this.shouldLog('warn')) {
-      console.warn(this.formatMessage(message), ...args);
+      if (this.config.logToFile) {
+        this.writeToFile('warn', this.formatMessage(message), ...args);
+      }
+      if (this.shouldLogToConsole('warn')) {
+        console.warn(this.formatMessage(message), ...args);
+      }
     }
   }
   
@@ -102,7 +215,12 @@ export class Logger {
    */
   public error(message: string, ...args: any[]): void {
     if (this.shouldLog('error')) {
-      console.error(this.formatMessage(message), ...args);
+      if (this.config.logToFile) {
+        this.writeToFile('error', this.formatMessage(message), ...args);
+      }
+      if (this.shouldLogToConsole('error')) {
+        console.error(this.formatMessage(message), ...args);
+      }
     }
   }
 
@@ -292,12 +410,26 @@ export const logger = new Logger();
 
 /**
  * Create a logger for MCP mode
+ *
+ * @param prefix Optional prefix for all log messages
+ * @param logToFile Optional file path for persistent logging. When provided, logs are written to file even in MCP mode while console output is suppressed.
+ * @returns Logger instance configured for MCP compliance
+ *
+ * @example
+ * ```typescript
+ * // Basic MCP logger (console suppressed)
+ * const logger = createMcpLogger('MyServer');
+ *
+ * // MCP logger with file output (console suppressed, file enabled)
+ * const fileLogger = createMcpLogger('MyServer', './logs/mcp.log');
+ * ```
  */
-export function createMcpLogger(prefix?: string): Logger {
+export function createMcpLogger(prefix?: string, logToFile?: string): Logger {
   return new Logger({
     level: 'error', // Only errors in MCP mode
     mcpMode: true,
-    prefix
+    prefix,
+    logToFile
   });
 }
 

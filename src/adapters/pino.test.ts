@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SimpleMcpPinoTransport, createPinoTransport, createPinoDestination, createPinoLogger } from './pino.js';
+import * as fs from 'node:fs';
 
 describe('Pino Adapter', () => {
   let consoleSpy: {
@@ -298,6 +299,204 @@ describe('Pino Adapter', () => {
           global.window = originalWindow;
         }
       }
+    });
+  });
+
+  describe('file logging support', () => {
+    const testLogFile = './test-logs/pino-test.log';
+    
+    beforeEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    afterEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should create transport with file logging option', async () => {
+      const transport = new SimpleMcpPinoTransport({
+        level: 'debug',
+        logToFile: testLogFile
+      });
+
+      transport.transform({
+        level: 'info',
+        msg: 'pino file test'
+      });
+
+      await transport.close();
+
+      expect(fs.existsSync(testLogFile)).toBe(true);
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: pino file test');
+    });
+
+    it('should write to file in MCP mode while suppressing console', async () => {
+      const transport = new SimpleMcpPinoTransport({
+        level: 'debug',
+        mcpMode: true,
+        logToFile: testLogFile
+      });
+
+      transport.transform({
+        level: 'info',
+        msg: 'mcp pino message'
+      });
+
+      await transport.close();
+
+      // Should not log to console in MCP mode
+      expect(consoleSpy.error).not.toHaveBeenCalled();
+
+      // But should write to file
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: mcp pino message');
+    });
+
+    it('should allow setting log file dynamically', async () => {
+      const transport = new SimpleMcpPinoTransport({ level: 'debug' });
+
+      await transport.setLogFile(testLogFile);
+      transport.transform({
+        level: 'info',
+        msg: 'dynamic file test'
+      });
+
+      await transport.close();
+
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: dynamic file test');
+    });
+  });
+
+  describe('createPinoDestination with file logging', () => {
+    const testLogFile = './test-logs/pino-destination-test.log';
+    
+    afterEach(() => {
+      try {
+        if (fs.existsSync(testLogFile)) {
+          fs.unlinkSync(testLogFile);
+        }
+        if (fs.existsSync('./test-logs')) {
+          fs.rmdirSync('./test-logs');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should write logs through destination to file', async () => {
+      const destination = createPinoDestination({
+        level: 'debug',
+        logToFile: testLogFile
+      });
+
+      destination.write({
+        level: 'info',
+        msg: 'destination file message'
+      });
+
+      await destination.end();
+
+      const logContent = fs.readFileSync(testLogFile, 'utf8');
+      expect(logContent).toContain('INFO: destination file message');
+    });
+
+    it('should handle file write errors gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Try to write to an invalid path
+      const transport = new SimpleMcpPinoTransport({
+        level: 'debug',
+        logToFile: '/invalid/path/test.log'
+      });
+
+      transport.transform({
+        level: 'info',
+        msg: 'test message'
+      });
+
+      await transport.close();
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to initialize file logging'));
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle file permission errors', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Create a read-only directory (if possible on the system)
+      const readOnlyDir = './test-logs/readonly';
+      const readOnlyFile = `${readOnlyDir}/readonly.log`;
+
+      try {
+        fs.mkdirSync(readOnlyDir, { recursive: true });
+        fs.chmodSync(readOnlyDir, 0o444); // Read-only
+
+        const transport = new SimpleMcpPinoTransport({
+          level: 'debug',
+          logToFile: readOnlyFile
+        });
+
+        transport.transform({
+          level: 'info',
+          msg: 'permission test'
+        });
+
+        await transport.close();
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('File logging will be disabled'));
+      } catch (error) {
+        // Skip test if we can't create read-only directory (e.g., on Windows)
+        console.log('Skipping permission test:', error);
+      } finally {
+        try {
+          fs.chmodSync(readOnlyDir, 0o755); // Restore permissions
+          fs.rmSync(readOnlyDir, { recursive: true, force: true });
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('should continue logging to console when file logging fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const transport = new SimpleMcpPinoTransport({
+        level: 'debug',
+        mcpMode: false, // Allow console logging
+        logToFile: '/invalid/path/test.log'
+      });
+
+      transport.transform({
+        level: 'info',
+        msg: 'fallback test'
+      });
+
+      await transport.close();
+
+      // Should still log to console even if file logging fails
+      expect(consoleSpy).toHaveBeenCalledWith('fallback test');
+      consoleSpy.mockRestore();
     });
   });
 });
